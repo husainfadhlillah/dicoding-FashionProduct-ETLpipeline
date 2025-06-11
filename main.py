@@ -1,67 +1,55 @@
 # main.py
 
-from utils.extract import scrape_products
+from utils.extract import extract_all_data
 from utils.transform import transform_data
-from utils.load import load_to_csv, load_to_gsheets, load_to_postgres
+from utils.load import save_to_csv, save_to_gsheets, save_to_postgresql
 import logging
 
-# Konfigurasi logging utama
+# Konfigurasi logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- KONFIGURASI ---
-# Ganti dengan path dan URL Anda
-CSV_PATH = "products.csv"
-GOOGLE_SHEETS_CREDS_PATH = "google-sheets-api.json" # Pastikan file ini ada
-GOOGLE_SHEETS_URL = "https://docs.google.com/spreadsheets/d/your-sheet-id/edit" # Ganti dengan URL Anda
-POSTGRES_DB_URI = "postgresql://user:password@host:port/dbname" # Ganti dengan URI database Anda
+# Ganti dengan path dan URL Anda yang sebenarnya
+CSV_PATH = 'products.csv'
+GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/your-sheet-id/edit?usp=sharing' # GANTI INI
+GOOGLE_API_CREDENTIALS = 'google-sheets-api.json' # Pastikan file ini ada
+POSTGRES_DB_URI = 'postgresql://user:password@localhost:5432/dbname' # GANTI INI
+POSTGRES_TABLE_NAME = 'fashion_products'
+# --------------------
 
 def main():
-    """
-    Fungsi utama untuk menjalankan pipeline ETL.
-    """
-    logging.info("Memulai pipeline ETL...")
+    """Fungsi utama untuk menjalankan pipeline ETL."""
+    
+    # 1. TAHAP EKSTRAKSI
+    logging.info("Starting ETL pipeline...")
+    logging.info("--- STAGE 1: EXTRACT ---")
+    raw_df = extract_all_data()
+    
+    if raw_df.empty:
+        logging.warning("Extraction resulted in an empty DataFrame. Terminating pipeline.")
+        return
 
-    # 1. TAHAP EXTRACT
-    logging.info("Tahap 1: Ekstraksi Data dari Website.")
-    raw_df = scrape_products(max_pages=50)
+    # 2. TAHAP TRANSFORMASI
+    logging.info("--- STAGE 2: TRANSFORM ---")
+    clean_df = transform_data(raw_df)
 
-    # Lanjutkan hanya jika ekstraksi berhasil
-    if raw_df is not None and not raw_df.empty:
-        logging.info("Ekstraksi data berhasil.")
-        
-        # 2. TAHAP TRANSFORM
-        logging.info("Tahap 2: Transformasi dan Pembersihan Data.")
-        cleaned_df = transform_data(raw_df)
-        
-        if cleaned_df is not None and not cleaned_df.empty:
-            logging.info("Transformasi data berhasil.")
-            
-            # 3. TAHAP LOAD
-            logging.info("Tahap 3: Memuat Data ke Repositori.")
-            
-            # Memuat ke CSV (Wajib)
-            load_to_csv(cleaned_df, CSV_PATH)
-            
-            # Memuat ke Google Sheets (Untuk nilai Skilled/Advanced)
-            # Pastikan GOOGLE_SHEETS_URL tidak placeholder
-            if "your-sheet-id" not in GOOGLE_SHEETS_URL:
-                 load_to_gsheets(cleaned_df, GOOGLE_SHEETS_CREDS_PATH, GOOGLE_SHEETS_URL)
-            else:
-                logging.warning("URL Google Sheets belum diatur. Melewati proses load ke Google Sheets.")
+    if clean_df.empty:
+        logging.warning("Transformation resulted in an empty DataFrame. Terminating pipeline.")
+        return
 
-            # Memuat ke PostgreSQL (Untuk nilai Skilled/Advanced)
-            # Pastikan POSTGRES_DB_URI tidak placeholder
-            if "user:password" not in POSTGRES_DB_URI:
-                 load_to_postgres(cleaned_df, POSTGRES_DB_URI)
-            else:
-                logging.warning("URI PostgreSQL belum diatur. Melewati proses load ke PostgreSQL.")
+    # 3. TAHAP LOAD (memenuhi kriteria Advanced)
+    logging.info("--- STAGE 3: LOAD ---")
+    
+    # Memuat ke CSV (Basic)
+    save_to_csv(clean_df, CSV_PATH)
+    
+    # Memuat ke Google Sheets (Skilled/Advanced)
+    save_to_gsheets(clean_df, GOOGLE_SHEET_URL, GOOGLE_API_CREDENTIALS)
 
-        else:
-            logging.error("Transformasi data gagal atau menghasilkan data kosong.")
-    else:
-        logging.error("Ekstraksi data gagal atau tidak menghasilkan data.")
-        
-    logging.info("Pipeline ETL selesai.")
+    # Memuat ke PostgreSQL (Skilled/Advanced)
+    save_to_postgresql(clean_df, POSTGRES_DB_URI, POSTGRES_TABLE_NAME)
 
-if __name__ == "__main__":
+    logging.info("ETL pipeline completed successfully.")
+
+if __name__ == '__main__':
     main()

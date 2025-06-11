@@ -9,99 +9,100 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 def transform_data(df):
     """
-    Fungsi untuk membersihkan dan mentransformasi data produk.
-
+    Membersihkan dan mentransformasi DataFrame data produk.
+    
     Args:
-        df (pandas.DataFrame): DataFrame mentah hasil scraping.
-
-    Returns:
-        pandas.DataFrame: DataFrame yang sudah bersih dan siap di-load.
-    """
-    if df is None:
-        logging.error("DataFrame input kosong, proses transformasi dibatalkan.")
-        return None
+        df (pandas.DataFrame): DataFrame mentah hasil ekstraksi.
         
-    # Membuat salinan untuk menghindari SettingWithCopyWarning
+    Returns:
+        pandas.DataFrame: DataFrame yang sudah bersih dan siap untuk dimuat.
+    """
+    if df.empty:
+        logging.warning("Input DataFrame is empty. No transformation performed.")
+        return df
+
+    # Salin DataFrame untuk menghindari SettingWithCopyWarning
     df_transformed = df.copy()
 
-    # --- TAHAP 1: Membersihkan Nilai Tidak Valid ---
-    # Pola data kotor yang perlu dibersihkan
-    dirty_patterns = {
-        "Title": ["Unknown Product"],
-        "Rating": ["Invalid Rating / 5", "Not Rated"],
-        "Price": ["Price Unavailable"]
-    }
-
-    # Mengganti pola kotor dengan NaN (Not a Number) agar mudah dihapus
-    for column, patterns in dirty_patterns.items():
-        for pattern in patterns:
-            df_transformed[column] = df_transformed[column].replace(pattern, np.nan)
-
-    logging.info("Selesai mengganti pola data kotor dengan NaN.")
-
-    # --- TAHAP 2: Transformasi Kolom ---
-    # Fungsi transformasi individual dengan error handling (kriteria Advanced)
-    
+    # 1. Menangani nilai-nilai invalid yang sudah didefinisikan
     try:
-        # Membersihkan dan konversi kolom 'Price'
+        dirty_patterns = {
+            "Title": ["Unknown Product"],
+            "Rating": ["Invalid Rating / 5", "Not Rated"],
+            "Price": ["Price Unavailable"]
+        }
+        for col, patterns in dirty_patterns.items():
+            for pattern in patterns:
+                df_transformed[col] = df_transformed[col].replace(pattern, np.nan)
+        logging.info("Replaced dirty patterns with NaN.")
+    except Exception as e:
+        # Error handling (Kriteria Advanced)
+        logging.error(f"Error during handling dirty patterns: {e}")
+        return pd.DataFrame()
+
+    # 2. Membersihkan dan mengonversi kolom 'Price' ke Rupiah
+    try:
+        # Hapus '$' dan konversi ke float, lalu kalikan 16000
         df_transformed['Price'] = df_transformed['Price'].str.replace('$', '', regex=False).astype(float)
-        # Konversi ke Rupiah (asumsi 1 USD = 16000 IDR)
         df_transformed['Price'] = df_transformed['Price'] * 16000
-        df_transformed.rename(columns={'Price': 'Price_IDR'}, inplace=True)
-        logging.info("Kolom 'Price' berhasil diubah ke 'Price_IDR' dan dikonversi ke Rupiah.")
+        logging.info("Transformed 'Price' column to Rupiah.")
     except Exception as e:
-        logging.error(f"Error saat transformasi kolom Price: {e}")
-        # Jika ada error, kolom ini bisa di-drop atau diisi nilai default
-        df_transformed['Price_IDR'] = np.nan
+        logging.error(f"Error transforming 'Price' column: {e}")
+        df_transformed['Price'] = np.nan # Jika gagal, jadikan NaN
 
+    # 3. Membersihkan dan mengonversi kolom 'Rating'
     try:
-        # Ekstrak angka dari kolom 'Rating'
-        df_transformed['Rating'] = df_transformed['Rating'].str.extract(r'(\d+\.\d+)').astype(float)
-        logging.info("Kolom 'Rating' berhasil diekstrak dan diubah ke float.")
+        # Ekstrak angka dari string rating
+        df_transformed['Rating'] = df_transformed['Rating'].str.extract(r'(\d+\.\d+|\d+)').astype(float)
+        logging.info("Transformed 'Rating' column to float.")
     except Exception as e:
-        logging.error(f"Error saat transformasi kolom Rating: {e}")
+        logging.error(f"Error transforming 'Rating' column: {e}")
         df_transformed['Rating'] = np.nan
 
+    # 4. Membersihkan kolom 'Colors', 'Size', dan 'Gender'
     try:
-        # Ekstrak angka dari kolom 'Colors'
         df_transformed['Colors'] = df_transformed['Colors'].str.extract(r'(\d+)').astype(int)
-        logging.info("Kolom 'Colors' berhasil diekstrak dan diubah ke integer.")
+        df_transformed['Size'] = df_transformed['Size'].str.replace('Size: ', '', regex=False)
+        df_transformed['Gender'] = df_transformed['Gender'].str.replace('Gender: ', '', regex=False)
+        logging.info("Cleaned 'Colors', 'Size', and 'Gender' columns.")
     except Exception as e:
-        logging.error(f"Error saat transformasi kolom Colors: {e}")
-        df_transformed['Colors'] = np.nan
+        logging.error(f"Error cleaning text columns: {e}")
 
+    # 5. Menghapus baris dengan nilai null (setelah semua pembersihan)
+    df_cleaned = df_transformed.dropna()
+    logging.info(f"Dropped {len(df_transformed) - len(df_cleaned)} rows with null values.")
+
+    # 6. Menghapus data duplikat
+    initial_rows = len(df_cleaned)
+    df_final = df_cleaned.drop_duplicates()
+    logging.info(f"Dropped {initial_rows - len(df_final)} duplicate rows.")
+
+    # 7. Memastikan tipe data sesuai dengan kriteria
     try:
-        # Membersihkan kolom 'Size' dan 'Gender' dari teks awalan
-        df_transformed['Size'] = df_transformed['Size'].str.replace('Size: ', '', regex=False).str.strip()
-        df_transformed['Gender'] = df_transformed['Gender'].str.replace('Gender: ', '', regex=False).str.strip()
-        logging.info("Kolom 'Size' dan 'Gender' berhasil dibersihkan.")
+        df_final = df_final.astype({
+            'Title': 'object',
+            'Price': 'float64',
+            'Rating': 'float64',
+            'Colors': 'int64',
+            'Size': 'object',
+            'Gender': 'object'
+        })
+        logging.info("Final data types have been set.")
     except Exception as e:
-        logging.error(f"Error saat membersihkan kolom teks: {e}")
+        logging.error(f"Error setting final data types: {e}")
+    
+    logging.info(f"Transformation complete. Final data has {len(df_final)} rows.")
+    return df_final
 
-    # --- TAHAP 3: Membersihkan Nilai Kosong dan Duplikat ---
-    initial_rows = len(df_transformed)
-    # Menghapus baris dengan nilai NaN (yang berasal dari data kotor atau error)
-    df_transformed.dropna(inplace=True)
-    rows_after_na = len(df_transformed)
+if __name__ == '__main__':
+    # Contoh data mentah untuk pengujian mandiri
+    sample_raw_data = pd.DataFrame([
+        {'Title': 'T-shirt 2', 'Price': '$102.15', 'Rating': '3.9 / 5', 'Colors': '3 Colors', 'Size': 'Size: M', 'Gender': 'Gender: Women', 'Timestamp': datetime.now()},
+        {'Title': 'Unknown Product', 'Price': '$100.00', 'Rating': '4.0 / 5', 'Colors': '1 Color', 'Size': 'Size: L', 'Gender': 'Gender: Men', 'Timestamp': datetime.now()},
+        {'Title': 'Pants 4', 'Price': 'Price Unavailable', 'Rating': 'Not Rated', 'Colors': '2 Colors', 'Size': 'Size: XL', 'Gender': 'Gender: Unisex', 'Timestamp': datetime.now()},
+    ])
     
-    # Menghapus data duplikat
-    df_transformed.drop_duplicates(inplace=True)
-    rows_after_duplicates = len(df_transformed)
-    
-    logging.info(f"Pembersihan data selesai. Baris awal: {initial_rows}, setelah dropna: {rows_after_na}, setelah drop_duplicates: {rows_after_duplicates}.")
-    
-    # --- TAHAP 4: Mengatur Ulang Tipe Data ---
-    # Memastikan tipe data sesuai dengan ekspektasi
-    final_dtypes = {
-        'Title': 'object',
-        'Price_IDR': 'float64',
-        'Rating': 'float64',
-        'Colors': 'int64',
-        'Size': 'object',
-        'Gender': 'object',
-        'timestamp': 'datetime64[ns]'
-    }
-    df_transformed = df_transformed.astype(final_dtypes)
-    logging.info("Tipe data akhir telah disesuaikan.")
-    
-    return df_transformed
+    clean_df = transform_data(sample_raw_data)
+    print(clean_df)
+    print("\nInfo tipe data:")
+    clean_df.info()

@@ -1,51 +1,50 @@
 # tests/test_load.py
 
-import pytest
+import unittest
+from unittest.mock import patch, MagicMock
 import pandas as pd
-from unittest.mock import MagicMock, patch
+from utils.load import save_to_csv, save_to_gsheets, save_to_postgresql
 
-# Import fungsi yang akan di-test
-from utils.load import load_to_csv, load_to_gsheets, load_to_postgres
+class TestLoad(unittest.TestCase):
 
-@pytest.fixture
-def sample_dataframe():
-    """Fixture untuk menyediakan DataFrame sampel."""
-    return pd.DataFrame({'col1': [1, 2], 'col2': ['A', 'B']})
+    def setUp(self):
+        """Menyiapkan data bersih untuk pengujian."""
+        self.clean_df = pd.DataFrame({'Title': ['Test'], 'Price': [160000]})
 
-def test_load_to_csv(mocker, sample_dataframe):
-    """Menguji fungsi load_to_csv."""
-    # Mock method to_csv dari pandas DataFrame
-    mock_to_csv = mocker.patch.object(pd.DataFrame, 'to_csv')
-    
-    load_to_csv(sample_dataframe, 'test.csv')
-    
-    # Pastikan mock dipanggil sekali dengan argumen yang benar
-    mock_to_csv.assert_called_once_with('test.csv', index=False)
+    @patch('pandas.DataFrame.to_csv')
+    def test_save_to_csv(self, mock_to_csv):
+        """Tes penyimpanan ke CSV."""
+        save_to_csv(self.clean_df, 'test.csv')
+        # Pastikan fungsi to_csv dipanggil sekali dengan argumen yang benar
+        mock_to_csv.assert_called_once_with('test.csv', index=False)
 
-def test_load_to_gsheets(mocker, sample_dataframe):
-    """Menguji fungsi load_to_gsheets."""
-    # Mock seluruh rantai pemanggilan gspread
-    mock_creds = mocker.patch('utils.load.Credentials.from_service_account_file')
-    mock_client = mocker.patch('utils.load.gspread.authorize')
-    mock_worksheet = MagicMock()
-    mock_spreadsheet = MagicMock()
-    mock_spreadsheet.worksheet.return_value = mock_worksheet
-    mock_client.return_value.open_by_url.return_value = mock_spreadsheet
+    @patch('utils.load.gspread.service_account')
+    def test_save_to_gsheets(self, mock_gspread_auth):
+        """Tes penyimpanan ke Google Sheets."""
+        # Mocking seluruh rantai otentikasi gspread
+        mock_client = MagicMock()
+        mock_sheet = MagicMock()
+        mock_worksheet = MagicMock()
+        
+        mock_gspread_auth.return_value = mock_client
+        mock_client.open_by_url.return_value = mock_sheet
+        mock_sheet.sheet1 = mock_worksheet
 
-    load_to_gsheets(sample_dataframe, 'creds.json', 'sheet_url')
+        save_to_gsheets(self.clean_df, 'dummy_url', 'dummy_creds.json')
+        
+        # Pastikan worksheet dibersihkan dan diupdate
+        mock_worksheet.clear.assert_called_once()
+        mock_worksheet.update.assert_called_once()
 
-    # Pastikan method update dipanggil
-    assert mock_worksheet.clear.called
-    assert mock_worksheet.update.called
+    @patch('utils.load.create_engine')
+    @patch('pandas.DataFrame.to_sql')
+    def test_save_to_postgresql(self, mock_to_sql, mock_create_engine):
+        """Tes penyimpanan ke PostgreSQL."""
+        save_to_postgresql(self.clean_df, 'dummy_uri', 'test_table')
+        
+        # Pastikan engine dibuat dan to_sql dipanggil
+        mock_create_engine.assert_called_once_with('dummy_uri')
+        mock_to_sql.assert_called_once()
 
-def test_load_to_postgres(mocker, sample_dataframe):
-    """Menguji fungsi load_to_postgres."""
-    # Mock create_engine dan method to_sql
-    mock_create_engine = mocker.patch('utils.load.create_engine')
-    mock_to_sql = mocker.patch.object(pd.DataFrame, 'to_sql')
-
-    load_to_postgres(sample_dataframe, 'db_uri', 'table')
-
-    # Pastikan mock dipanggil
-    mock_create_engine.assert_called_once_with('db_uri')
-    mock_to_sql.assert_called_once_with('table', mock_create_engine.return_value, if_exists='replace', index=False)
+if __name__ == '__main__':
+    unittest.main()

@@ -6,92 +6,104 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import logging
 
-# Konfigurasi logging untuk memberikan informasi saat proses berjalan
+# Konfigurasi logging untuk mencatat informasi dan error
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def scrape_products(max_pages=50):
+def scrape_page(page_number):
     """
-    Fungsi untuk melakukan web scraping data produk dari situs Fashion Studio.
-
+    Mengambil data dari satu halaman website Fashion Studio.
+    
     Args:
-        max_pages (int): Jumlah maksimum halaman yang akan di-scrape.
-
+        page_number (int): Nomor halaman yang akan di-scrape.
+        
     Returns:
-        pandas.DataFrame: DataFrame yang berisi data produk mentah,
-                          atau None jika terjadi kesalahan.
+        list: Sebuah list berisi dictionary, di mana setiap dictionary adalah data satu produk.
+              Mengembalikan None jika terjadi error.
     """
-    base_url = "https://fashion-studio.dicoding.dev"
-    all_products = []
-    
-    # Menggunakan session untuk re-use koneksi TCP, lebih efisien
-    with requests.Session() as session:
-        # Loop untuk scraping dari halaman 1 hingga max_pages
-        for page in range(1, max_pages + 1):
-            url = f"{base_url}/index.php?page={page}"
+    url = f"https://fashion-studio.dicoding.dev/page/{page_number}"
+    try:
+        # Menggunakan session untuk koneksi yang lebih efisien
+        session = requests.Session()
+        response = session.get(url, timeout=10) # Timeout 10 detik
+        response.raise_for_status() # Akan melempar error jika status code bukan 2xx
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        products = soup.find_all('div', class_='collection-card')
+        
+        page_products = []
+        for product in products:
             try:
-                # Melakukan request GET ke URL
-                response = session.get(url, timeout=10)
-                # Memastikan request berhasil (status code 200)
-                response.raise_for_status()
-                logging.info(f"Berhasil mengakses halaman: {url}")
-
-                # Parsing HTML dengan BeautifulSoup dan parser lxml
-                soup = BeautifulSoup(response.text, 'lxml')
+                title = product.find('h3', class_='product-title').text.strip()
                 
-                # Mencari semua kartu produk di halaman
-                product_cards = soup.find_all('div', class_='collection-card')
-
-                # Jika tidak ada kartu produk, hentikan loop (sudah mencapai halaman terakhir)
-                if not product_cards:
-                    logging.info(f"Tidak ada produk di halaman {page}. Proses scraping berhenti.")
-                    break
+                # Menangani harga yang bisa berada di tag span atau p
+                price_container = product.find('div', class_='price-container')
+                price_span = price_container.find('span', class_='price')
+                if price_span:
+                    price = price_span.text.strip()
+                else:
+                    price = "Price Unavailable" # Default jika harga tidak ditemukan
                 
-                # Ekstraksi data dari setiap kartu produk
-                for card in product_cards:
-                    # Mencari elemen-elemen data. Menggunakan .text dan .strip() untuk membersihkan spasi
-                    title = card.find('h3', class_='product-title').text.strip()
-                    
-                    # Penanganan untuk harga yang memiliki struktur tag berbeda
-                    price_element_span = card.find('span', class_='price')
-                    price_element_p = card.find('p', class_='price')
-                    
-                    if price_element_span:
-                        price = price_element_span.text.strip()
-                    elif price_element_p:
-                        price = price_element_p.text.strip()
-                    else:
-                        price = None
-                        
-                    rating_text = card.find('p', string=lambda t: t and 'Rating:' in t).text.strip()
-                    colors_text = card.find('p', string=lambda t: t and 'Colors' in t).text.strip()
-                    size_text = card.find('p', string=lambda t: t and 'Size:' in t).text.strip()
-                    gender_text = card.find('p', string=lambda t: t and 'Gender:' in t).text.strip()
+                # Menangani rating yang bisa memiliki format berbeda
+                rating_p = product.find('p', style="font-size: 14px; color: #777;")
+                rating = rating_p.text.strip().replace('Rating: ', '') if rating_p else "Not Rated"
 
-                    # Menambahkan data yang diekstrak ke dalam list
-                    all_products.append({
-                        "Title": title,
-                        "Price": price,
-                        "Rating": rating_text,
-                        "Colors": colors_text,
-                        "Size": size_text,
-                        "Gender": gender_text
-                    })
-            
-            # Penanganan error untuk kegagalan koneksi atau timeout
-            except requests.exceptions.RequestException as e:
-                logging.error(f"Gagal mengakses {url}: {e}")
-                # Jika terjadi error, kembalikan None untuk menandakan kegagalan
-                return None
-    
-    if not all_products:
-        logging.warning("Tidak ada produk yang berhasil di-scrape.")
+                details = product.find_all('p', style="font-size: 14px; color: #777;")
+                
+                # Ekstrak Warna, Ukuran, dan Gender dengan aman
+                colors = details[1].text.strip() if len(details) > 1 else "N/A"
+                size = details[2].text.strip() if len(details) > 2 else "N/A"
+                gender = details[3].text.strip() if len(details) > 3 else "N/A"
+
+                page_products.append({
+                    "Title": title,
+                    "Price": price,
+                    "Rating": rating,
+                    "Colors": colors,
+                    "Size": size,
+                    "Gender": gender,
+                })
+            except Exception as e:
+                logging.error(f"Error parsing product card: {e}")
+                continue # Lanjut ke produk berikutnya jika ada error di satu kartu
+                
+        logging.info(f"Successfully scraped page {page_number}, found {len(page_products)} products.")
+        return page_products
+        
+    except requests.exceptions.RequestException as e:
+        # Penanganan error koneksi (Kriteria Advanced)
+        logging.error(f"Error fetching website on page {page_number}: {e}")
         return None
 
-    # Mengubah list of dictionaries menjadi DataFrame
-    products_df = pd.DataFrame(all_products)
+def extract_all_data():
+    """
+    Fungsi utama untuk melakukan scraping ke semua halaman (1-50).
     
-    # Menambahkan kolom timestamp sesuai kriteria Skilled
-    products_df['timestamp'] = datetime.now()
+    Returns:
+        pandas.DataFrame: DataFrame berisi semua data produk mentah yang berhasil diekstrak,
+                          ditambah kolom 'Timestamp'.
+    """
+    all_products = []
+    # Mengambil data dari halaman 1 sampai 50
+    for i in range(1, 51):
+        products_on_page = scrape_page(i)
+        if products_on_page:
+            all_products.extend(products_on_page)
     
-    logging.info(f"Total produk yang berhasil di-scrape: {len(products_df)}")
-    return products_df
+    if not all_products:
+        logging.warning("No products were extracted. Exiting.")
+        return pd.DataFrame()
+
+    df = pd.DataFrame(all_products)
+    
+    # Menambahkan kolom timestamp (Kriteria Skilled)
+    df['Timestamp'] = datetime.now()
+    
+    logging.info(f"Extraction complete. Total products extracted: {len(df)}")
+    return df
+
+if __name__ == '__main__':
+    # Contoh cara menjalankan fungsi extract secara mandiri
+    raw_df = extract_all_data()
+    if not raw_df.empty:
+        print(raw_df.head())
+        print(f"\nTotal data mentah: {len(raw_df)} baris")

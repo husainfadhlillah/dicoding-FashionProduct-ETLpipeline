@@ -1,62 +1,53 @@
 # tests/test_extract.py
 
-import pytest
+import unittest
+from unittest.mock import patch, MagicMock
 import pandas as pd
-import requests_mock
-from utils.extract import scrape_products
+from utils.extract import scrape_page
 
-@pytest.fixture
-def mock_html_page1():
-    """Fixture untuk menyediakan konten HTML palsu halaman 1."""
-    return """
-    <html><body>
-        <div class="collection-card">
-            <h3 class="product-title">T-shirt 2</h3>
-            <span class="price">$102.15</span>
-            <p>Rating: 3.9 / 5</p>
-            <p>3 Colors</p>
-            <p>Size: M</p>
-            <p>Gender: Women</p>
-        </div>
-        <div class="collection-card">
-            <h3 class="product-title">Unknown Product</h3>
-            <p class="price">Price Unavailable</p>
-            <p>Rating: Not Rated</p>
-            <p>5 Colors</p>
-            <p>Size: L</p>
-            <p>Gender: Men</p>
-        </div>
-    </body></html>
-    """
+class TestExtract(unittest.TestCase):
 
-@pytest.fixture
-def mock_html_empty_page():
-    """Fixture untuk konten HTML halaman kosong."""
-    return "<html><body></body></html>"
+    @patch('utils.extract.requests.Session.get')
+    def test_scrape_page_success(self, mock_get):
+        """Tes scraping halaman berhasil."""
+        # Siapkan HTML palsu untuk disimulasikan sebagai respons
+        mock_html = """
+        <html><body>
+            <div class="collection-card">
+                <h3 class="product-title">Test Product 1</h3>
+                <div class="price-container"><span class="price">$50.00</span></div>
+                <p style="font-size: 14px; color: #777;">Rating: 4.5 / 5</p>
+                <p style="font-size: 14px; color: #777;">3 Colors</p>
+                <p style="font-size: 14px; color: #777;">Size: L</p>
+                <p style="font-size: 14px; color: #777;">Gender: Men</p>
+            </div>
+        </body></html>
+        """
+        # Konfigurasi mock response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = mock_html
+        mock_get.return_value = mock_response
 
-def test_scrape_products_success(requests_mock, mock_html_page1, mock_html_empty_page):
-    """Menguji skenario scraping berhasil."""
-    # Mock request untuk halaman 1 agar mengembalikan HTML palsu
-    requests_mock.get('https://fashion-studio.dicoding.dev/index.php?page=1', text=mock_html_page1)
-    # Mock request untuk halaman 2 agar mengembalikan halaman kosong (akhir dari scraping)
-    requests_mock.get('https://fashion-studio.dicoding.dev/index.php?page=2', text=mock_html_empty_page)
-    
-    df = scrape_products(max_pages=2)
-    
-    # Assertions
-    assert df is not None
-    assert isinstance(df, pd.DataFrame)
-    assert len(df) == 2
-    assert 'timestamp' in df.columns
-    assert df.iloc[0]['Title'] == 'T-shirt 2'
-    assert df.iloc[1]['Price'] == 'Price Unavailable'
+        # Jalankan fungsi yang diuji
+        result = scrape_page(1)
+        
+        # Periksa hasilnya
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['Title'], 'Test Product 1')
+        self.assertEqual(result[0]['Price'], '$50.00')
+        self.assertEqual(result[0]['Rating'], '4.5 / 5')
 
-def test_scrape_products_network_error(requests_mock):
-    """Menguji penanganan error saat koneksi gagal."""
-    # Mock request agar mengembalikan error koneksi
-    requests_mock.get('https://fashion-studio.dicoding.dev/index.php?page=1', exc=requests.exceptions.ConnectionError)
-    
-    df = scrape_products(max_pages=1)
-    
-    # Assertions
-    assert df is None
+    @patch('utils.extract.requests.Session.get')
+    def test_scrape_page_request_exception(self, mock_get):
+        """Tes jika terjadi error koneksi saat scraping."""
+        # Simulasikan error koneksi
+        mock_get.side_effect = requests.exceptions.RequestException("Connection error")
+        
+        # Jalankan fungsi dan pastikan mengembalikan None
+        result = scrape_page(1)
+        self.assertIsNone(result)
+
+if __name__ == '__main__':
+    unittest.main()
