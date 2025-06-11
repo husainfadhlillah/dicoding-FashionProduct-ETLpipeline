@@ -1,5 +1,7 @@
 import unittest
 from unittest.mock import patch, Mock
+# Menambahkan import ini agar 'requests.exceptions.RequestException' dikenali.
+import requests
 from utils.extract import scrape_all_products
 
 class TestExtract(unittest.TestCase):
@@ -28,7 +30,7 @@ class TestExtract(unittest.TestCase):
         products = scrape_all_products()
 
         # Melakukan assertions
-        self.assertEqual(len(products), 50) # Karena kita mock 1 produk per halaman, untuk 50 halaman
+        self.assertEqual(len(products), 50) # Karena mock 1 produk per halaman, untuk 50 halaman
         self.assertEqual(products[0]['title'], 'T-shirt Keren')
         self.assertEqual(products[0]['price'], '$10.00')
 
@@ -54,12 +56,12 @@ class TestExtract(unittest.TestCase):
 
         # Memeriksa apakah halaman pertama dipanggil dengan URL dasar
         mock_get.assert_any_call('https://fashion-studio.dicoding.dev', timeout=15)
-        # Memeriksa apakah halaman kedua dipanggil dengan format URL yang benar
-        mock_get.assert_any_call('https://fashion-studio.dicoding.dev/page/2', timeout=15)
+        
+        # URL yang benar adalah tanpa garis miring sebelum nomor halaman.
+        mock_get.assert_any_call('https://fashion-studio.dicoding.dev/page2', timeout=15)
+        
         # Memeriksa total panggilan sesuai jumlah halaman
         self.assertEqual(mock_get.call_count, 50)
 
 if __name__ == '__main__':
-    # Menambahkan import yang mungkin terlewat
-    import requests
     unittest.main(argv=['first-arg-is-ignored'], exit=False)

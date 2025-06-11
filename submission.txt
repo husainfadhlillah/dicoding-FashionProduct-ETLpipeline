@@ -1,11 +1,24 @@
-# Menjalankan skrip
-python3 main.py
+# 1. Buat environment baru (jika belum dibuat)
+conda create --name fashion_env python=3.9
 
-# Menjalankan unit test pada folder tests
-python3 -m pytest tests
+# 2. Aktifkan environment tersebut
+conda activate fashion_env
 
-# Menjalankan test coverage pada folder tests
-coverage run -m pytest tests && coverage report
+# 3. Install semua dependency
+pip install -r requirements.txt
+
+# 4. Jalankan pipeline utama
+python main.py
+
+# 5. Menjalankan unit test pada folder tests
+python -m pytest tests
+
+# 6. Menjalankan test coverage pada folder tests
+# Langkah pertama: Jalankan tes dengan coverage
+coverage run -m pytest tests
+
+# Langkah kedua: Tampilkan laporannya
+coverage report -m
 
 # Url Google Sheets:
 https://docs.google.com/spreadsheets/d/1OHiRarkea9UD6MQ7WzyzseSYTRdpcexO2H-DS8aoSXA/edit?gid=0#gid=0

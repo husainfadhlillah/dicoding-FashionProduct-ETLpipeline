@@ -57,7 +57,9 @@ def scrape_all_products() -> List[Dict[str, any]]:
         if page_num == 1:
             url = config.BASE_URL
         else:
-            url = f"{config.BASE_URL}/page/{page_num}"
+            # --- PERBAIKAN DI SINI ---
+            # Menghapus garis miring (/) antara 'page' dan nomor halaman
+            url = f"{config.BASE_URL}/page{page_num}"
         
         print(f"Scraping halaman: {url}")
 
