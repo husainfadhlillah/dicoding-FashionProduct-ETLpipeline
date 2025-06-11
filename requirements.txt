@@ -14,6 +14,10 @@ google-auth-oauthlib~=1.2
 google-api-python-client~=2.134
 google-api-python-client~=2.126
 oauth2client~=4.1
+gspread-dataframe~=3.0
+
+# Configuration management
+python-dotenv~=1.0
 
 # Testing libraries
 pytest~=8.2

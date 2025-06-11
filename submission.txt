@@ -2,11 +2,10 @@
 python3 main.py
 
 # Menjalankan unit test pada folder tests
-python3 -m pytest tests/
+python3 -m pytest tests
 
 # Menjalankan test coverage pada folder tests
-coverage run -m pytest tests/ && coverage report
+coverage run -m pytest tests && coverage report
 
 # Url Google Sheets:
-# Ganti dengan URL Google Sheet Anda yang sudah di-share dengan akses EDITOR
-https://docs.google.com/spreadsheets/d/your-sheet-id/edit?usp=sharing
+https://docs.google.com/spreadsheets/d/1OHiRarkea9UD6MQ7WzyzseSYTRdpcexO2H-DS8aoSXA/edit?gid=0#gid=0
