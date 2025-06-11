@@ -1,4 +1,4 @@
-# Proyek Fundamental Data: ETL Pipeline untuk Analisis Produk Fashion
+# Proyek ETL Pipeline untuk Analisis Produk Fashion
 
 ## 👤 Informasi Pengembang
 
